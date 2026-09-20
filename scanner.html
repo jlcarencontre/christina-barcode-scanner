@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>バーコード読み取り</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#111;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{background:#172f55;padding:16px;font-size:22px;font-weight:bold}
+.message{margin:14px 12px;padding:16px;background:#27313e;border-radius:14px;font-size:17px;line-height:1.6}
+#reader{width:calc(100% - 24px);margin:16px 12px;border-radius:18px;overflow:hidden;background:#000;min-height:360px}
+#result{margin:16px 12px;padding:14px 16px;border-radius:14px;background:#153d2c;font-size:18px;line-height:1.5;min-height:54px}
+#stopButton{display:block;width:calc(100% - 24px);margin:14px 12px 24px;padding:17px;border:0;border-radius:14px;background:#edf2f8;color:#17324f;font-size:18px;font-weight:bold}
+</style>
+</head>
+<body>
+<header>📷 バーコード読み取り</header>
+<div class="message">商品バーコードを枠内に入れてください。<br>認識すると自動的に在庫管理画面へ戻ります。</div>
+<div id="reader"></div>
+<div id="result">カメラを起動しています…</div>
+<button id="stopButton" onclick="stopScanner()">読み取りを終了</button>
+
+<script>
+let scanner=null;
+let scanFinished=false;
+const params=new URLSearchParams(window.location.search);
+const returnUrl=params.get("returnUrl");
+
+function showResult(message,success=false){
+  const r=document.getElementById("result");
+  r.innerHTML=message;
+  r.style.background=success?"#153d2c":"#3a2424";
+}
+
+function onScanSuccess(decodedText){
+  if(scanFinished)return;
+  scanFinished=true;
+  const barcode=String(decodedText).trim();
+
+  showResult("読み取り成功："+barcode+"<br>在庫管理画面へ戻ります…",true);
+
+  if(scanner)scanner.stop().catch(function(){});
+
+  if(!returnUrl){
+    showResult("読み取り成功："+barcode+"<br>戻り先URLが指定されていません。");
+    scanFinished=false;
+    return;
+  }
+
+  try{
+    const url=new URL(returnUrl);
+    url.searchParams.set("barcode",barcode);
+    setTimeout(function(){window.location.href=url.toString();},500);
+  }catch(e){
+    showResult("読み取り成功："+barcode+"<br>戻り先URLの処理に失敗しました。");
+    scanFinished=false;
+  }
+}
+
+function onScanFailure(error){}
+
+async function startScanner(){
+  scanner=new Html5Qrcode("reader");
+  const config={
+    fps:10,
+    qrbox:function(w,h){
+      const m=Math.min(w,h);
+      return {width:Math.floor(m*.78),height:Math.floor(m*.45)};
+    },
+    aspectRatio:1,
+    formatsToSupport:[
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E
+    ]
+  };
+
+  try{
+    await scanner.start({facingMode:{exact:"environment"}},config,onScanSuccess,onScanFailure);
+    showResult("カメラ起動中です。バーコードを枠内に入れてください。",true);
+  }catch(e1){
+    try{
+      await scanner.start({facingMode:"environment"},config,onScanSuccess,onScanFailure);
+      showResult("カメラ起動中です。バーコードを枠内に入れてください。",true);
+    }catch(e2){
+      showResult("カメラを起動できませんでした。<br>ブラウザのカメラ許可を確認してください。");
+    }
+  }
+}
+
+async function stopScanner(){
+  if(scanner){try{await scanner.stop();}catch(e){}}
+  if(returnUrl)window.location.href=returnUrl;
+  else window.history.back();
+}
+
+window.addEventListener("load",startScanner);
+</script>
+</body>
+</html>
